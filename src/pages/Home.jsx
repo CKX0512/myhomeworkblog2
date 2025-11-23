@@ -23,18 +23,41 @@ function Home() {
 
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      // 先查询所有文章
+      const { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select(`
-          *,
-          users:author_id (
-            username
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
-      if (error) throw error
-      setPosts(data || [])
+      if (postsError) throw postsError
+
+      // 获取所有唯一的 author_id
+      const authorIds = [...new Set(postsData.map(post => post.author_id).filter(Boolean))]
+      
+      // 批量查询用户信息
+      let usersMap = {}
+      if (authorIds.length > 0) {
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('id, username')
+          .in('id', authorIds)
+
+        if (usersError) throw usersError
+        
+        // 创建用户映射
+        usersMap = (usersData || []).reduce((acc, user) => {
+          acc[user.id] = user
+          return acc
+        }, {})
+      }
+
+      // 合并文章和用户信息
+      const postsWithUsers = (postsData || []).map(post => ({
+        ...post,
+        users: usersMap[post.author_id] || null
+      }))
+
+      setPosts(postsWithUsers)
     } catch (err) {
       setError(err.message)
       console.error('Error fetching posts:', err)

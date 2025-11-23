@@ -22,19 +22,34 @@ function PostDetail() {
 
   const fetchPost = async () => {
     try {
-      const { data, error } = await supabase
+      // 先查询文章
+      const { data: postData, error: postError } = await supabase
         .from('posts')
-        .select(`
-          *,
-          users:author_id (
-            username
-          )
-        `)
+        .select('*')
         .eq('id', id)
         .single()
 
-      if (error) throw error
-      setPost(data)
+      if (postError) throw postError
+
+      // 如果有 author_id，查询用户信息
+      let userData = null
+      if (postData.author_id) {
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('username')
+          .eq('id', postData.author_id)
+          .single()
+
+        if (!userError && user) {
+          userData = user
+        }
+      }
+
+      // 合并文章和用户信息
+      setPost({
+        ...postData,
+        users: userData
+      })
     } catch (err) {
       setError(err.message)
       console.error('Error fetching post:', err)
