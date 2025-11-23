@@ -79,6 +79,52 @@
   border-radius: 2px;
 }
 
+.navbar-user {
+  display: flex;
+  align-items: center;
+}
+
+.user-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.btn-logout {
+  background: transparent;
+  border: 2px solid var(--primary-color);
+  color: var(--primary-color);
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.btn-logout:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.btn-register {
+  background: var(--primary-color);
+  color: white !important;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.btn-register:hover {
+  background: var(--secondary-color);
+  opacity: 1;
+}
+
+.btn-register.active {
+  background: var(--secondary-color);
+}
+
 @media (max-width: 768px) {
   .navbar-container {
     padding: 0.75rem 1rem;
@@ -99,6 +145,15 @@
   .navbar-menu a {
     padding: 0.5rem;
     font-size: 0.9rem;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .btn-logout {
+    padding: 0.5rem;
+    font-size: 0.85rem;
   }
 }
 

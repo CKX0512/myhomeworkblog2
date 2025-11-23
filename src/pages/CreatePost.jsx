@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import './CreatePost.css'
 
 function CreatePost() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user, userProfile, loading: authLoading } = useAuth()
   const isEdit = !!id
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
@@ -14,41 +16,21 @@ function CreatePost() {
   const [fetching, setFetching] = useState(isEdit)
 
   useEffect(() => {
+    // 如果未登录，重定向到登录页
+    if (!authLoading && !user) {
+      navigate('/login')
+      return
+    }
+
+    // 如果已登录，设置作者ID
+    if (user) {
+      setAuthorId(user.id)
+    }
+
     if (isEdit) {
       fetchPost()
-    } else {
-      // 创建新文章时，尝试获取或创建默认用户
-      getOrCreateDefaultUser()
     }
-  }, [id])
-
-  const getOrCreateDefaultUser = async () => {
-    try {
-      // 尝试获取第一个用户，如果没有则创建一个默认用户
-      const { data: users, error: fetchError } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1)
-
-      if (fetchError) throw fetchError
-
-      if (users && users.length > 0) {
-        setAuthorId(users[0].id)
-      } else {
-        // 创建默认用户
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert([{ username: '博主' }])
-          .select()
-          .single()
-
-        if (createError) throw createError
-        setAuthorId(newUser.id)
-      }
-    } catch (err) {
-      console.error('Error getting/creating user:', err)
-    }
-  }
+  }, [id, user, authLoading, navigate])
 
   const fetchPost = async () => {
     try {
@@ -94,10 +76,10 @@ function CreatePost() {
         if (error) throw error
         navigate(`/post/${id}`)
       } else {
-        if (!authorId) {
-          await getOrCreateDefaultUser()
-          // 等待一下让authorId设置
-          await new Promise(resolve => setTimeout(resolve, 100))
+        if (!user || !authorId) {
+          alert('请先登录')
+          navigate('/login')
+          return
         }
 
         const { data, error } = await supabase
@@ -123,13 +105,17 @@ function CreatePost() {
     }
   }
 
-  if (fetching) {
+  if (authLoading || fetching) {
     return (
       <div className="loading-container">
         <div className="spinner"></div>
         <p>加载中...</p>
       </div>
     )
+  }
+
+  if (!user) {
+    return null
   }
 
   return (
