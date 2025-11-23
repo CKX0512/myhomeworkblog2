@@ -7,6 +7,7 @@ import CreatePost from './pages/CreatePost'
 import About from './pages/About'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import './utils/diagnose' // 导入诊断工具（会在控制台提供 diagnoseSupabase 函数）
 import './App.css'
 
 function App() {

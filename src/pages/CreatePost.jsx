@@ -61,20 +61,36 @@ function CreatePost() {
       return
     }
 
+    if (!supabase) {
+      alert('Supabase 未正确配置，请检查环境变量')
+      return
+    }
+
     try {
       setLoading(true)
       
       if (isEdit) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('posts')
           .update({
             title: title.trim(),
-            content: content.trim()
+            content: content.trim(),
+            updated_at: new Date().toISOString()
           })
           .eq('id', id)
+          .select()
+          .single()
 
-        if (error) throw error
-        navigate(`/post/${id}`)
+        if (error) {
+          console.error('Error updating post:', error)
+          throw error
+        }
+        
+        if (data) {
+          navigate(`/post/${id}`)
+        } else {
+          throw new Error('更新失败，未返回数据')
+        }
       } else {
         if (!user || !authorId) {
           alert('请先登录')
@@ -82,6 +98,39 @@ function CreatePost() {
           return
         }
 
+        // 确保用户记录存在（如果不存在，尝试创建）
+        try {
+          const { error: userCheckError } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', authorId)
+            .single()
+
+          if (userCheckError && userCheckError.code === 'PGRST116') {
+            // 用户不存在，尝试创建
+            const { data: authUser } = await supabase.auth.getUser()
+            const defaultUsername = authUser?.user?.email?.split('@')[0] || '用户'
+            
+            const { error: createUserError } = await supabase
+              .from('users')
+              .insert([
+                {
+                  id: authorId,
+                  username: defaultUsername,
+                },
+              ])
+
+            if (createUserError) {
+              console.warn('Warning: Could not create user record:', createUserError)
+              // 继续尝试插入文章，因为外键约束可能允许直接使用 auth.users.id
+            }
+          }
+        } catch (userErr) {
+          console.warn('Warning: Error checking user:', userErr)
+          // 继续尝试插入文章
+        }
+
+        // 插入文章
         const { data, error } = await supabase
           .from('posts')
           .insert([
@@ -94,11 +143,27 @@ function CreatePost() {
           .select()
           .single()
 
-        if (error) throw error
-        navigate(`/post/${data.id}`)
+        if (error) {
+          console.error('Error creating post:', error)
+          // 提供更详细的错误信息
+          if (error.code === '23503') {
+            throw new Error('创建失败：用户不存在，请先确保已正确注册')
+          } else if (error.code === '42501') {
+            throw new Error('创建失败：权限不足，请检查数据库RLS策略')
+          } else {
+            throw error
+          }
+        }
+        
+        if (data && data.id) {
+          navigate(`/post/${data.id}`)
+        } else {
+          throw new Error('创建失败，未返回文章ID')
+        }
       }
     } catch (err) {
-      alert('保存失败: ' + err.message)
+      const errorMessage = err.message || '保存失败，请稍后重试'
+      alert('保存失败: ' + errorMessage)
       console.error('Error saving post:', err)
     } finally {
       setLoading(false)

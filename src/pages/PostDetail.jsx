@@ -21,7 +21,15 @@ function PostDetail() {
   }, [id])
 
   const fetchPost = async () => {
+    if (!supabase) {
+      setError('Supabase 未正确配置，请检查 .env 文件')
+      setLoading(false)
+      return
+    }
+
     try {
+      setError(null)
+      
       // 先查询文章
       const { data: postData, error: postError } = await supabase
         .from('posts')
@@ -29,19 +37,32 @@ function PostDetail() {
         .eq('id', id)
         .single()
 
-      if (postError) throw postError
+      if (postError) {
+        console.error('Error fetching post:', postError)
+        throw postError
+      }
 
-      // 如果有 author_id，查询用户信息
+      if (!postData) {
+        throw new Error('文章不存在')
+      }
+
+      // 如果有 author_id，查询用户信息（失败不影响文章显示）
       let userData = null
       if (postData.author_id) {
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('username')
-          .eq('id', postData.author_id)
-          .single()
+        try {
+          const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', postData.author_id)
+            .single()
 
-        if (!userError && user) {
-          userData = user
+          if (!userError && user) {
+            userData = user
+          } else if (userError) {
+            console.warn('Warning: Could not fetch user info:', userError)
+          }
+        } catch (userErr) {
+          console.warn('Warning: Error fetching user (non-blocking):', userErr)
         }
       }
 
@@ -51,7 +72,8 @@ function PostDetail() {
         users: userData
       })
     } catch (err) {
-      setError(err.message)
+      const errorMessage = err.message || '加载文章失败'
+      setError(errorMessage)
       console.error('Error fetching post:', err)
     } finally {
       setLoading(false)
@@ -59,6 +81,8 @@ function PostDetail() {
   }
 
   const fetchComments = async () => {
+    if (!supabase) return
+    
     try {
       const { data, error } = await supabase
         .from('comments')
@@ -66,10 +90,16 @@ function PostDetail() {
         .eq('post_id', id)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
+      if (error) {
+        console.error('Error fetching comments:', error)
+        setComments([])
+        return
+      }
+      
       setComments(data || [])
     } catch (err) {
       console.error('Error fetching comments:', err)
+      setComments([])
     }
   }
 
@@ -77,22 +107,46 @@ function PostDetail() {
     e.preventDefault()
     if (!commentContent.trim()) return
 
+    if (!supabase) {
+      alert('Supabase 未正确配置')
+      return
+    }
+
     try {
       setSubmitting(true)
-      const { error } = await supabase
+      
+      // 获取当前用户ID（如果有）
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      const { data, error } = await supabase
         .from('comments')
         .insert([
           {
             post_id: id,
+            user_id: userId,
             content: commentContent.trim()
           }
         ])
+        .select()
+        .single()
 
-      if (error) throw error
-      setCommentContent('')
-      fetchComments()
+      if (error) {
+        console.error('Error submitting comment:', error)
+        if (error.code === '42501') {
+          throw new Error('评论失败：权限不足，请检查数据库RLS策略')
+        } else {
+          throw error
+        }
+      }
+      
+      if (data) {
+        setCommentContent('')
+        fetchComments()
+      }
     } catch (err) {
-      alert('评论失败: ' + err.message)
+      const errorMessage = err.message || '评论失败，请稍后重试'
+      alert('评论失败: ' + errorMessage)
       console.error('Error submitting comment:', err)
     } finally {
       setSubmitting(false)
