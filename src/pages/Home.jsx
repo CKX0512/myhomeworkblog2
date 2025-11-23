@@ -22,18 +22,31 @@ function Home() {
       return
     }
 
+    // 设置超时保护（5秒）
+    const timeoutId = setTimeout(() => {
+      console.error('⏰ 请求超时（5秒），强制结束加载')
+      setError('请求超时，请检查网络连接或刷新页面重试')
+      setLoading(false)
+      setPosts([])
+    }, 5000)
+
     try {
       setLoading(true)
       setError(null)
       console.log('🔄 开始加载文章...')
       console.log('📍 Supabase URL:', import.meta.env.VITE_SUPABASE_URL ? '已配置' : '未配置')
       
-      // 查询所有文章
+      // 查询所有文章（添加超时包装）
       console.log('📤 发送查询请求...')
-      const { data: postsData, error: postsError } = await supabase
+      const queryPromise = supabase
         .from('posts')
         .select('*')
         .order('created_at', { ascending: false })
+      
+      const { data: postsData, error: postsError } = await queryPromise
+      
+      // 清除超时
+      clearTimeout(timeoutId)
       
       console.log('📥 收到响应')
 
@@ -53,6 +66,7 @@ function Home() {
       // 如果没有文章，设置空数组并结束加载
       if (!postsData || postsData.length === 0) {
         console.log('ℹ️ 数据库中没有文章')
+        clearTimeout(timeoutId)
         setPosts([])
         setLoading(false)
         return
@@ -95,6 +109,8 @@ function Home() {
       console.log('✅ 文章数据准备完成，共', postsWithUsers.length, '篇')
       setPosts(postsWithUsers)
     } catch (err) {
+      // 确保清除超时
+      clearTimeout(timeoutId)
       const errorMessage = err.message || '加载文章失败'
       setError(errorMessage)
       console.error('❌ 加载文章时发生错误:', err)
@@ -108,9 +124,11 @@ function Home() {
       // 即使出错，也设置空数组，避免页面一直加载
       setPosts([])
     } finally {
+      // 确保清除超时
+      clearTimeout(timeoutId)
       console.log('🏁 加载流程结束，设置 loading = false')
       setLoading(false)
-      // 双重保险：如果 1 秒后还在加载，强制设置为 false
+      // 双重保险：如果 2 秒后还在加载，强制设置为 false
       setTimeout(() => {
         setLoading(prev => {
           if (prev) {
@@ -119,7 +137,7 @@ function Home() {
           }
           return prev
         })
-      }, 1000)
+      }, 2000)
     }
   }
 
@@ -135,7 +153,34 @@ function Home() {
   if (error) {
     return (
       <div className="error-container">
-        <p>❌ 加载失败: {error}</p>
+        <div style={{ textAlign: 'center', padding: '2rem' }}>
+          <h2>❌ 加载失败</h2>
+          <p style={{ margin: '1rem 0', color: '#666' }}>{error}</p>
+          <div style={{ marginTop: '2rem' }}>
+            <button 
+              onClick={() => {
+                setError(null)
+                setLoading(true)
+                fetchPosts()
+              }}
+              style={{
+                padding: '0.75rem 1.5rem',
+                fontSize: '1rem',
+                backgroundColor: '#007bff',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                marginRight: '1rem'
+              }}
+            >
+              重试
+            </button>
+            <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#999' }}>
+              💡 提示：打开浏览器控制台（F12）运行 <code>diagnoseSupabase()</code> 来诊断问题
+            </p>
+          </div>
+        </div>
       </div>
     )
   }
