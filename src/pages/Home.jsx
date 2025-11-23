@@ -25,6 +25,11 @@ function Home() {
     // 设置超时保护（5秒）
     const timeoutId = setTimeout(() => {
       console.error('⏰ 请求超时（5秒），强制结束加载')
+      console.error('🔍 诊断信息:')
+      console.error('  - Supabase URL:', import.meta.env.VITE_SUPABASE_URL || '未配置')
+      console.error('  - Supabase Key:', import.meta.env.VITE_SUPABASE_ANON_KEY ? '已配置' : '未配置')
+      console.error('  - 请检查网络标签页，查看是否有请求发出')
+      console.error('  - 如果网络标签页为空，可能是 CORS 问题或环境变量未正确加载')
       setError('请求超时，请检查网络连接或刷新页面重试')
       setLoading(false)
       setPosts([])
@@ -34,16 +39,24 @@ function Home() {
       setLoading(true)
       setError(null)
       console.log('🔄 开始加载文章...')
-      console.log('📍 Supabase URL:', import.meta.env.VITE_SUPABASE_URL ? '已配置' : '未配置')
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      console.log('📍 Supabase URL:', supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : '❌ 未配置')
+      console.log('📍 Supabase Key:', supabaseKey ? '✅ 已配置' : '❌ 未配置')
       
       // 查询所有文章（添加超时包装）
-      console.log('📤 发送查询请求...')
+      console.log('📤 发送查询请求到 posts 表...')
+      console.log('🔗 请求 URL 应该是:', supabaseUrl ? `${supabaseUrl}/rest/v1/posts` : '未知')
+      
+      const startTime = Date.now()
       const queryPromise = supabase
         .from('posts')
         .select('*')
         .order('created_at', { ascending: false })
       
       const { data: postsData, error: postsError } = await queryPromise
+      const endTime = Date.now()
+      console.log(`⏱️ 请求耗时: ${endTime - startTime}ms`)
       
       // 清除超时
       clearTimeout(timeoutId)
@@ -58,6 +71,17 @@ function Home() {
           details: postsError.details,
           hint: postsError.hint
         })
+        
+        // 提供更具体的错误信息
+        if (postsError.code === 'PGRST116') {
+          setError('posts 表不存在，请检查数据库设置')
+        } else if (postsError.code === '42501') {
+          setError('权限不足：posts 表可能被 RLS 策略阻止。请在 Supabase 中运行 fix_database_rls.sql')
+        } else if (postsError.message?.includes('timeout') || postsError.message?.includes('网络')) {
+          setError('网络请求超时，请检查网络连接或 Supabase 服务状态')
+        } else {
+          setError(`查询失败: ${postsError.message || '未知错误'}`)
+        }
         throw postsError
       }
 

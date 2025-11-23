@@ -61,15 +61,55 @@ export const diagnoseSupabase = async () => {
     console.error('❌ 连接异常:', err)
   }
 
-  // 4. 检查表是否存在
+  // 4. 测试网络请求
+  console.log('\n🌐 测试网络请求...')
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+  if (supabaseUrl) {
+    try {
+      const testUrl = `${supabaseUrl}/rest/v1/posts?select=*&limit=1`
+      console.log('📡 测试请求 URL:', testUrl)
+      
+      const startTime = Date.now()
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY || ''}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      const endTime = Date.now()
+      
+      console.log(`⏱️ 请求耗时: ${endTime - startTime}ms`)
+      console.log('📊 响应状态:', response.status, response.statusText)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ 请求失败，响应内容:', errorText.substring(0, 200))
+        results.errors.push(`网络请求失败: ${response.status} ${response.statusText}`)
+      } else {
+        console.log('✅ 网络请求成功')
+      }
+    } catch (networkErr) {
+      console.error('❌ 网络请求异常:', networkErr)
+      results.errors.push(`网络请求异常: ${networkErr.message}`)
+      console.error('💡 这可能是 CORS 问题或网络连接问题')
+    }
+  }
+
+  // 5. 检查表是否存在
   const tables = ['posts', 'users', 'comments']
   
   for (const table of tables) {
     try {
+      console.log(`\n🔍 检查表 ${table}...`)
+      const startTime = Date.now()
       const { data, error } = await supabase
         .from(table)
         .select('*')
         .limit(1)
+      const endTime = Date.now()
+      console.log(`⏱️ 查询耗时: ${endTime - startTime}ms`)
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -80,13 +120,18 @@ export const diagnoseSupabase = async () => {
           results.rls[table] = '可能被 RLS 策略阻止'
           results.errors.push(`表 ${table} 存在但可能被 RLS 策略阻止: ${error.message}`)
           console.warn(`⚠️ 表 ${table} 存在但可能被 RLS 策略阻止`)
+          console.warn(`   错误代码: ${error.code}`)
+          console.warn(`   错误信息: ${error.message}`)
+          console.warn(`   💡 解决方案: 在 Supabase SQL Editor 中运行 fix_database_rls.sql`)
         } else {
           results.errors.push(`查询表 ${table} 时出错: ${error.message}`)
           console.error(`❌ 查询表 ${table} 时出错:`, error)
+          console.error(`   错误代码: ${error.code}`)
+          console.error(`   错误详情:`, error)
         }
       } else {
         results.tables[table] = true
-        console.log(`✅ 表 ${table} 可访问`)
+        console.log(`✅ 表 ${table} 可访问，返回 ${data?.length || 0} 条记录`)
       }
     } catch (err) {
       results.errors.push(`检查表 ${table} 时发生异常: ${err.message}`)
